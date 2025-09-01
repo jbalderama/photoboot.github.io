@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Photobooth</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .photo-frame {
+            background: linear-gradient(45deg, #f0f0f0, #e0e0e0);
+            border: 8px solid #fff;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .countdown {
+            font-size: 8rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .capture-flash {
+            animation: flash 0.3s ease-out;
+        }
+        @keyframes flash {
+            0% { background: rgba(255,255,255,0); }
+            50% { background: rgba(255,255,255,0.8); }
+            100% { background: rgba(255,255,255,0); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-600 to-blue-600 min-h-screen">
+    <!-- Admin Interface -->
+    <div id="adminPanel" class="fixed top-4 right-4 bg-white rounded-lg p-4 shadow-lg z-50 hidden">
+        <h3 class="text-lg font-bold mb-4">Admin Panel</h3>
+        
+        <!-- Layout Selection -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium mb-2">Layout Size:</label>
+            <select id="layoutSelect" class="w-full p-2 border rounded">
+                <option value="6x4">6x4 inch (Landscape)</option>
+                <option value="2x6">2x6 inch (Portrait)</option>
+            </select>
+        </div>
+        
+        <!-- Background Upload -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium mb-2">Background Design:</label>
+            <input type="file" id="backgroundUpload" accept="image/*" class="w-full p-2 border rounded">
+            <button id="clearBackground" class="mt-2 px-3 py-1 bg-red-500 text-white rounded text-sm">Clear Background</button>
+        </div>
+        
+        <!-- Settings -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium mb-2">Photos per Layout:</label>
+            <input type="number" id="photosPerLayout" value="3" min="1" max="6" class="w-full p-2 border rounded">
+        </div>
+        
+        <button id="closeAdmin" class="w-full bg-gray-500 text-white py-2 rounded">Close Admin</button>
+    </div>
+
+    <!-- Main Interface -->
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl font-bold text-white mb-4">📸 Web Photobooth</h1>
+            <button id="adminToggle" class="bg-gray-800 text-white px-4 py-2 rounded-lg">Admin Panel</button>
+        </div>
+
+        <!-- Camera Section -->
+        <div id="cameraSection" class="bg-white rounded-2xl p-6 mb-8 shadow-2xl">
+            <div class="flex flex-col lg:flex-row gap-6">
+                <!-- Live Camera Feed -->
+                <div class="flex-1">
+                    <div class="relative bg-black rounded-lg overflow-hidden" style="aspect-ratio: 4/3;">
+                        <video id="cameraFeed" class="w-full h-full object-cover" autoplay muted></video>
+                        <canvas id="captureCanvas" class="hidden"></canvas>
+                        
+                        <!-- Countdown Overlay -->
+                        <div id="countdownOverlay" class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+                            <div id="countdownNumber" class="countdown text-white font-bold">5</div>
+                        </div>
+                        
+                        <!-- Flash Effect -->
+                        <div id="flashEffect" class="absolute inset-0 pointer-events-none"></div>
+                    </div>
+                    
+                    <!-- Camera Controls -->
+                    <div class="flex justify-center mt-4 gap-4">
+                        <button id="startCamera" class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg font-bold text-lg">
+                            📹 Start Camera
+                        </button>
+                        <button id="startPhotoshoot" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-bold text-lg hidden">
+                            📸 Start Photoshoot
+                        </button>
+                        <button id="stopPhotoshoot" class="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-bold text-lg hidden">
+                            ⏹️ Stop
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Layout Preview -->
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold mb-4">Current Layout Preview</h3>
+                    <div id="layoutPreview" class="photo-frame mx-auto bg-white" style="width: 300px; height: 200px;">
+                        <div id="photoSlots" class="h-full flex gap-2 p-2">
+                            <!-- Photo slots will be generated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Progress -->
+                    <div class="mt-4">
+                        <div class="flex justify-between text-sm text-gray-600 mb-2">
+                            <span>Progress</span>
+                            <span id="progressText">0/3 photos</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="progressBar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Photo Gallery -->
+        <div class="bg-white rounded-2xl p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Photo Gallery</h2>
+                <div class="flex gap-2">
+                    <button id="clearGallery" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">Clear All</button>
+                    <span id="photoCount" class="bg-gray-100 px-3 py-2 rounded">0 photos</span>
+                </div>
+            </div>
+            
+            <!-- Photo Grid -->
+            <div id="photoGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+                <!-- Photos will be added here -->
+            </div>
+            
+            <!-- Pagination -->
+            <div id="pagination" class="flex justify-center items-center gap-2 hidden">
+                <button id="prevPage" class="bg-gray-300 hover:bg-gray-400 px-3 py-2 rounded">Previous</button>
+                <span id="pageInfo" class="px-4 py-2">Page 1 of 1</span>
+                <button id="nextPage" class="bg-gray-300 hover:bg-gray-400 px-3 py-2 rounded">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class Photobooth {
+            constructor() {
+                this.camera = null;
+                this.currentPhotos = [];
+                this.allPhotos = [];
+                this.isCapturing = false;
+                this.currentPhotoIndex = 0;
+                this.photosPerLayout = 3;
+                this.layoutSize = '6x4';
+                this.backgroundImage = null;
+                this.currentPage = 1;
+                this.photosPerPage = 12;
+                
+                this.initializeElements();
+                this.setupEventListeners();
+                this.updateLayoutPreview();
+            }
+            
+            initializeElements() {
+                this.elements = {
+                    adminPanel: document.getElementById('adminPanel'),
+                    adminToggle: document.getElementById('adminToggle'),
+                    closeAdmin: document.getElementById('closeAdmin'),
+                    layoutSelect: document.getElementById('layoutSelect'),
+                    backgroundUpload: document.getElementById('backgroundUpload'),
+                    clearBackground: document.getElementById('clearBackground'),
+                    photosPerLayoutInput: document.getElementById('photosPerLayout'),
+                    cameraFeed: document.getElementById('cameraFeed'),
+                    captureCanvas: document.getElementById('captureCanvas'),
+                    startCamera: document.getElementById('startCamera'),
+                    startPhotoshoot: document.getElementById('startPhotoshoot'),
+                    stopPhotoshoot: document.getElementById('stopPhotoshoot'),
+                    countdownOverlay: document.getElementById('countdownOverlay'),
+                    countdownNumber: document.getElementById('countdownNumber'),
+                    flashEffect: document.getElementById('flashEffect'),
+                    layoutPreview: document.getElementById('layoutPreview'),
+                    photoSlots: document.getElementById('photoSlots'),
+                    progressText: document.getElementById('progressText'),
+                    progressBar: document.getElementById('progressBar'),
+                    photoGrid: document.getElementById('photoGrid'),
+                    photoCount: document.getElementById('photoCount'),
+                    clearGallery: document.getElementById('clearGallery'),
+                    pagination: document.getElementById('pagination'),
+                    prevPage: document.getElementById('prevPage'),
+                    nextPage: document.getElementById('nextPage'),
+                    pageInfo: document.getElementById('pageInfo')
+                };
+            }
+            
+            setupEventListeners() {
+                this.elements.adminToggle.addEventListener('click', () => this.toggleAdmin());
+                this.elements.closeAdmin.addEventListener('click', () => this.toggleAdmin());
+                this.elements.layoutSelect.addEventListener('change', (e) => this.changeLayout(e.target.value));
+                this.elements.backgroundUpload.addEventListener('change', (e) => this.handleBackgroundUpload(e));
+                this.elements.clearBackground.addEventListener('click', () => this.clearBackground());
+                this.elements.photosPerLayoutInput.addEventListener('change', (e) => this.changePhotosPerLayout(e.target.value));
+                this.elements.startCamera.addEventListener('click', () => this.startCamera());
+                this.elements.startPhotoshoot.addEventListener('click', () => this.startPhotoshoot());
+                this.elements.stopPhotoshoot.addEventListener('click', () => this.stopPhotoshoot());
+                this.elements.clearGallery.addEventListener('click', () => this.clearGallery());
+                this.elements.prevPage.addEventListener('click', () => this.changePage(-1));
+                this.elements.nextPage.addEventListener('click', () => this.changePage(1));
+            }
+            
+            toggleAdmin() {
+                this.elements.adminPanel.classList.toggle('hidden');
+            }
+            
+            changeLayout(layout) {
+                this.layoutSize = layout;
+                this.updateLayoutPreview();
+            }
+            
+            handleBackgroundUpload(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.backgroundImage = e.target.result;
+                        this.updateLayoutPreview();
+                    };
+                    reader.readAsDataURL(file);
+                }
+            }
+            
+            clearBackground() {
+                this.backgroundImage = null;
+                this.elements.backgroundUpload.value = '';
+                this.updateLayoutPreview();
+            }
+            
+            changePhotosPerLayout(count) {
+                this.photosPerLayout = 3; // Always keep it at 3 photos
+                this.elements.photosPerLayoutInput.value = 3;
+                this.updateLayoutPreview();
+            }
+            
+            updateLayoutPreview() {
+                const preview = this.elements.layoutPreview;
+                const slots = this.elements.photoSlots;
+                
+                // Update layout dimensions
+                if (this.layoutSize === '6x4') {
+                    preview.style.width = '400px';
+                    preview.style.height = '267px';
+                    slots.className = 'h-full flex gap-2 p-2';
+                } else {
+                    preview.style.width = '200px';
+                    preview.style.height = '600px';
+                    slots.className = 'h-full flex flex-col gap-2 p-2';
+                }
+                
+                // Set background
+                if (this.backgroundImage) {
+                    preview.style.backgroundImage = `url(${this.backgroundImage})`;
+                    preview.style.backgroundSize = 'cover';
+                    preview.style.backgroundPosition = 'center';
+                } else {
+                    preview.style.backgroundImage = 'none';
+                }
+                
+                // Create photo slots with specific positioning
+                slots.innerHTML = '';
+                slots.style.position = 'relative';
+                
+                if (this.layoutSize === '6x4') {
+                    // 6x4 layout positioning - Picture 1 bigger, others smaller
+                    const positions = [
+                        { position: 'absolute', left: '15px', bottom: '15px', width: '120px', height: '90px' }, // Picture 1: lower left (bigger)
+                        { position: 'absolute', right: '15px', top: '15px', width: '80px', height: '60px' }, // Picture 2: upper right
+                        { position: 'absolute', right: '15px', bottom: '15px', width: '80px', height: '60px' } // Picture 3: lower right
+                    ];
+                    
+                    for (let i = 0; i < 3; i++) {
+                        const slot = document.createElement('div');
+                        slot.className = 'bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500 text-xs';
+                        slot.textContent = `${i + 1}`;
+                        
+                        // Apply positioning
+                        Object.assign(slot.style, positions[i]);
+                        
+                        if (this.currentPhotos[i]) {
+                            slot.style.backgroundImage = `url(${this.currentPhotos[i]})`;
+                            slot.style.backgroundSize = 'cover';
+                            slot.style.backgroundPosition = 'center';
+                            slot.textContent = '';
+                            slot.className = slot.className.replace('bg-gray-200 border-dashed border-gray-400', 'bg-white');
+                        }
+                        
+                        slots.appendChild(slot);
+                    }
+                } else {
+                    // 2x6 layout - vertical stacking with space at bottom
+                    slots.style.paddingBottom = '80px'; // Space for background design at bottom
+                    
+                    for (let i = 0; i < 3; i++) {
+                        const slot = document.createElement('div');
+                        slot.className = 'bg-gray-200 rounded border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-500 text-sm mb-4';
+                        slot.style.height = '100px';
+                        slot.textContent = `Photo ${i + 1}`;
+                        
+                        if (this.currentPhotos[i]) {
+                            slot.style.backgroundImage = `url(${this.currentPhotos[i]})`;
+                            slot.style.backgroundSize = 'cover';
+                            slot.style.backgroundPosition = 'center';
+                            slot.textContent = '';
+                            slot.className = slot.className.replace('bg-gray-200 border-dashed border-gray-400', 'bg-white');
+                        }
+                        
+                        slots.appendChild(slot);
+                    }
+                }
+                
+                this.updateProgress();
+            }
+            
+            async startCamera() {
+                try {
+                    this.camera = await navigator.mediaDevices.getUserMedia({ 
+                        video: { width: 1280, height: 720 } 
+                    });
+                    this.elements.cameraFeed.srcObject = this.camera;
+                    
+                    this.elements.startCamera.classList.add('hidden');
+                    this.elements.startPhotoshoot.classList.remove('hidden');
+                } catch (error) {
+                    alert('Camera access denied or not available');
+                }
+            }
+            
+            async startPhotoshoot() {
+                if (this.isCapturing) return;
+                
+                this.isCapturing = true;
+                this.currentPhotos = [];
+                this.currentPhotoIndex = 0;
+                
+                this.elements.startPhotoshoot.classList.add('hidden');
+                this.elements.stopPhotoshoot.classList.remove('hidden');
+                
+                await this.captureSequence();
+            }
+            
+            async captureSequence() {
+                for (let i = 0; i < this.photosPerLayout; i++) {
+                    if (!this.isCapturing) break;
+                    
+                    this.currentPhotoIndex = i;
+                    
+                    // Countdown (5 seconds for first, 3 seconds for others)
+                    const countdownTime = i === 0 ? 5 : 3;
+                    await this.showCountdown(countdownTime);
+                    
+                    if (!this.isCapturing) break;
+                    
+                    // Capture photo
+                    const photo = this.capturePhoto();
+                    this.currentPhotos.push(photo);
+                    this.updateLayoutPreview();
+                    
+                    // Flash effect
+                    this.elements.flashEffect.classList.add('capture-flash');
+                    setTimeout(() => {
+                        this.elements.flashEffect.classList.remove('capture-flash');
+                    }, 300);
+                    
+                    // Short pause between photos
+                    if (i < this.photosPerLayout - 1) {
+                        await this.delay(1000);
+                    }
+                }
+                
+                if (this.isCapturing) {
+                    this.completePhotoshoot();
+                }
+            }
+            
+            showCountdown(seconds) {
+                return new Promise((resolve) => {
+                    this.elements.countdownOverlay.classList.remove('hidden');
+                    
+                    let count = seconds;
+                    this.elements.countdownNumber.textContent = count;
+                    
+                    const interval = setInterval(() => {
+                        count--;
+                        if (count > 0) {
+                            this.elements.countdownNumber.textContent = count;
+                        } else {
+                            this.elements.countdownNumber.textContent = 'SMILE!';
+                            setTimeout(() => {
+                                this.elements.countdownOverlay.classList.add('hidden');
+                                clearInterval(interval);
+                                resolve();
+                            }, 500);
+                        }
+                    }, 1000);
+                });
+            }
+            
+            capturePhoto() {
+                const canvas = this.elements.captureCanvas;
+                const video = this.elements.cameraFeed;
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                ctx.drawImage(video, 0, 0);
+                return canvas.toDataURL('image/jpeg', 0.8);
+            }
+            
+            async completePhotoshoot() {
+                // Create final layout
+                const finalLayout = await this.createFinalLayout();
+                this.allPhotos.unshift(finalLayout);
+                
+                this.updateGallery();
+                this.stopPhotoshoot();
+            }
+            
+            createFinalLayout() {
+                return new Promise((resolve) => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Set canvas size based on layout
+                    if (this.layoutSize === '6x4') {
+                        canvas.width = 600;
+                        canvas.height = 400;
+                    } else {
+                        canvas.width = 300;
+                        canvas.height = 900;
+                    }
+                    
+                    // Draw background first
+                    if (this.backgroundImage) {
+                        const bgImg = new Image();
+                        bgImg.onload = () => {
+                            ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+                            this.drawPhotosOnCanvasAsync(ctx, canvas).then(() => {
+                                resolve(canvas.toDataURL('image/jpeg', 0.9));
+                            });
+                        };
+                        bgImg.src = this.backgroundImage;
+                    } else {
+                        ctx.fillStyle = '#f0f0f0';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        this.drawPhotosOnCanvasAsync(ctx, canvas).then(() => {
+                            resolve(canvas.toDataURL('image/jpeg', 0.9));
+                        });
+                    }
+                });
+            }
+            
+            drawPhotosOnCanvasAsync(ctx, canvas) {
+                return new Promise((resolve) => {
+                    const padding = 30;
+                    let loadedCount = 0;
+                    const totalPhotos = Math.min(this.currentPhotos.length, 3);
+                    
+                    if (totalPhotos === 0) {
+                        resolve();
+                        return;
+                    }
+                    
+                    if (this.layoutSize === '6x4') {
+                        // 6x4 layout - leave 1/4 of right side for design background
+                        const availableWidth = canvas.width * 0.75; // Use 3/4 of width for photos
+                        
+                        // Photo sizes - Picture 1 bigger, others smaller
+                        const photo1Width = 200;
+                        const photo1Height = 150;
+                        const photo2Width = 140;
+                        const photo2Height = 105;
+                        const photo3Width = 140;
+                        const photo3Height = 105;
+                        
+                        // Photo positions for 6x4 layout
+                        const positions = [
+                            { x: padding, y: canvas.height - photo1Height - padding, width: photo1Width, height: photo1Height }, // Picture 1: lower left (bigger)
+                            { x: availableWidth - photo2Width - padding, y: padding, width: photo2Width, height: photo2Height }, // Picture 2: upper right
+                            { x: availableWidth - photo3Width - padding, y: canvas.height - photo3Height - padding, width: photo3Width, height: photo3Height } // Picture 3: lower right
+                        ];
+                        
+                        this.currentPhotos.forEach((photo, index) => {
+                            if (index < 3 && positions[index]) {
+                                const img = new Image();
+                                img.onload = () => {
+                                    const pos = positions[index];
+                                    ctx.drawImage(img, pos.x, pos.y, pos.width, pos.height);
+                                    loadedCount++;
+                                    if (loadedCount === totalPhotos) resolve();
+                                };
+                                img.src = photo;
+                            }
+                        });
+                    } else {
+                        // 2x6 layout - vertical strip layout with space at bottom
+                        const photoWidth = canvas.width - padding * 2;
+                        const photoHeight = 160;
+                        const gap = 30;
+                        const bottomSpace = 150; // Space reserved for background design
+                        
+                        this.currentPhotos.forEach((photo, index) => {
+                            if (index < 3) {
+                                const img = new Image();
+                                img.onload = () => {
+                                    const x = padding;
+                                    const y = padding + index * (photoHeight + gap);
+                                    ctx.drawImage(img, x, y, photoWidth, photoHeight);
+                                    loadedCount++;
+                                    if (loadedCount === totalPhotos) resolve();
+                                };
+                                img.src = photo;
+                            }
+                        });
+                    }
+                });
+            }
+            
+            stopPhotoshoot() {
+                this.isCapturing = false;
+                this.currentPhotos = [];
+                this.currentPhotoIndex = 0;
+                
+                this.elements.startPhotoshoot.classList.remove('hidden');
+                this.elements.stopPhotoshoot.classList.add('hidden');
+                this.elements.countdownOverlay.classList.add('hidden');
+                
+                this.updateLayoutPreview();
+            }
+            
+            updateProgress() {
+                const progress = (this.currentPhotos.length / this.photosPerLayout) * 100;
+                this.elements.progressBar.style.width = `${progress}%`;
+                this.elements.progressText.textContent = `${this.currentPhotos.length}/${this.photosPerLayout} photos`;
+            }
+            
+            updateGallery() {
+                this.elements.photoCount.textContent = `${this.allPhotos.length} photos`;
+                
+                const startIndex = (this.currentPage - 1) * this.photosPerPage;
+                const endIndex = startIndex + this.photosPerPage;
+                const photosToShow = this.allPhotos.slice(startIndex, endIndex);
+                
+                this.elements.photoGrid.innerHTML = '';
+                
+                photosToShow.forEach((photo, index) => {
+                    const photoElement = document.createElement('div');
+                    photoElement.className = 'relative group cursor-pointer';
+                    photoElement.innerHTML = `
+                        <img src="${photo}" alt="Photo ${startIndex + index + 1}" class="w-full h-48 object-cover rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded-lg flex items-center justify-center">
+                            <button class="download-btn opacity-0 group-hover:opacity-100 bg-white text-black px-3 py-1 rounded-full text-sm font-medium transition-opacity">
+                                Download
+                            </button>
+                        </div>
+                    `;
+                    
+                    photoElement.querySelector('.download-btn').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.downloadPhoto(photo, startIndex + index + 1);
+                    });
+                    
+                    this.elements.photoGrid.appendChild(photoElement);
+                });
+                
+                this.updatePagination();
+            }
+            
+            updatePagination() {
+                const totalPages = Math.ceil(this.allPhotos.length / this.photosPerPage);
+                
+                if (totalPages > 1) {
+                    this.elements.pagination.classList.remove('hidden');
+                    this.elements.pageInfo.textContent = `Page ${this.currentPage} of ${totalPages}`;
+                    this.elements.prevPage.disabled = this.currentPage === 1;
+                    this.elements.nextPage.disabled = this.currentPage === totalPages;
+                } else {
+                    this.elements.pagination.classList.add('hidden');
+                }
+            }
+            
+            changePage(direction) {
+                const totalPages = Math.ceil(this.allPhotos.length / this.photosPerPage);
+                this.currentPage = Math.max(1, Math.min(totalPages, this.currentPage + direction));
+                this.updateGallery();
+            }
+            
+            downloadPhoto(photoData, index) {
+                const link = document.createElement('a');
+                link.download = `photobooth-${index}-${Date.now()}.jpg`;
+                link.href = photoData;
+                link.click();
+            }
+            
+            clearGallery() {
+                if (confirm('Are you sure you want to clear all photos?')) {
+                    this.allPhotos = [];
+                    this.currentPage = 1;
+                    this.updateGallery();
+                }
+            }
+            
+            delay(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+        
+        // Initialize the photobooth when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new Photobooth();
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97852607e0bb850e',t:'MTc1NjczMzcwMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
